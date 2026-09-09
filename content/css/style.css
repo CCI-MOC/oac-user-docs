@@ -1,0 +1,111 @@
+* {
+	box-sizing: border-box;
+	max-width: 100%;
+}
+
+@media print {
+	.noprint {
+		display: none;
+	}
+
+	section {
+		break-inside: avoid;
+	}
+
+	a {
+		text-decoration: none;
+	}
+}
+
+body {
+	margin: min(10%, 2.5cm);
+	font-family:
+		Arial,
+		Helvetica Neue,
+		Helvetica,
+		sans-serif;
+}
+
+pre {
+	background-color: #e0e0e0;
+	border: thin solid black;
+	padding: 1rem;
+	white-space: pre-wrap; /* Preserves spaces/newlines and wraps naturally */
+	overflow-wrap: break-word; /* Breaks long strings/URLs if they overflow the box */
+}
+
+.box {
+	padding: 2ex;
+	overflow: auto;
+	float: left;
+	width: 50%;
+}
+
+.box img {
+	max-width: 50%;
+}
+
+.box h2 {
+	background-color: white;
+	padding: 0;
+	border: none;
+}
+
+div.clear {
+	clear: both;
+}
+
+.fullbox {
+	border: thick solid black;
+	padding: 1ex;
+}
+
+.fullbox h2 {
+	background-color: white;
+	padding: 0;
+	border: none;
+}
+
+.left {
+	float: left;
+}
+
+.right {
+	float: right;
+}
+
+.note {
+	background-color: #ffffe0;
+	border: thin solid black;
+	padding: 1ex;
+	border-radius: 5px;
+	font-family: Arial, sans-serif;
+}
+
+.smallimage img {
+	width: 200px;
+}
+
+.commalist {
+	padding-left: 2ex;
+}
+
+.commalist ul {
+	list-style-type: none;
+	margin: 0;
+	padding: 0;
+}
+
+.commalist li {
+	display: inline;
+}
+
+.commalist li:not(:last-child)::after {
+	content: "; ";
+}
+
+footer {
+	border-top: thin solid black;
+	margin-top: 1rem;
+	font-size: small;
+}

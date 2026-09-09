@@ -1,0 +1,56 @@
+name: Build site content
+
+on:
+  workflow_call:
+    inputs:
+      ELEVENTY_HTML_BASE:
+        type: string
+        required: false
+        default: "/"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      ELEVENTY_HTML_BASE: ${{ inputs.ELEVENTY_HTML_BASE }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install packages
+        run: |
+          npm install
+
+      - name: Start dev server for PDF generation
+        run: |
+          npx eleventy --serve --port=8080 &
+          echo $! > eleventy.pid
+        env:
+          ELEVENTY_HTML_BASE: /
+
+      - name: Wait for dev server
+        run: |
+          until curl -sf http://localhost:8080/ > /dev/null; do
+            sleep 1
+          done
+
+      - name: Generate PDF
+        run: |
+          google-chrome --headless --no-sandbox \
+            --print-to-pdf=_site/user-onboarding/user-onboarding.pdf \
+            http://localhost:8080/user-onboarding/
+
+      - name: Stop dev server
+        run: kill $(cat eleventy.pid)
+
+      - name: Build pages
+        run: |
+          npm run build
+
+      - name: Upload content artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
