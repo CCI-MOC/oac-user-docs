@@ -1,0 +1,27 @@
+{
+	"name": "oac-user-docs",
+	"version": "1.0.0",
+	"description": "User documentation for the Open Accelerator project",
+	"type": "module",
+	"scripts": {
+		"build": "eleventy",
+		"serve": "eleventy --watch --serve"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/cci-moc/oac-user-docs.git"
+	},
+	"author": "Open Accelerator Team",
+	"license": "Apache-2.0",
+	"bugs": {
+		"url": "https://github.com/cci-moc/oac-user-docs/issues"
+	},
+	"homepage": "https://github.com/cci-moc/oac-user-docs#readme",
+	"dependencies": {
+		"@11ty/eleventy": "^3.1.6",
+		"eleventy-plugin-toc": "^1.1.5",
+		"markdown-it": "^15.0.1",
+		"markdown-it-anchor": "^10.0.0",
+		"markdown-it-attrs": "^5.0.1"
+	}
+}
