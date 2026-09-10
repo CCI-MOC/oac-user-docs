@@ -10,9 +10,9 @@ toc: true
 
 ## Logging on to the OpenShift Console
 
-1. Send your email (associated with your organization or academic partner **NOT YOUR PERSONAL EMAIL**) to a member of the Red Hat team.
+1. Request an account by opening a ticket a <https://osticket.massopen.cloud>. Provide your organizational or academic email address (**NOT YOUR PERSONAL EMAIL**).
 
-2. Once they’ve veriﬁed your addition, open a browser and navigate to this URL: <https://console-openshift-console.apps.oac-prod-workload0.hcp.oac.massopen.cloud> Your screen should look like this:
+2. Once you receive notification that your account is available, open your browser and navigate to: <https://console-openshift-console.apps.oac-prod-workload0.hcp.oac.massopen.cloud> Your screen should look like this:
 
     ![](images/image-000.png)
 
