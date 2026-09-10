@@ -10,9 +10,9 @@ toc: true
 
 ## Logging on to the OpenShift Console
 
-1. Send your email (associated with your organization or academic partner **NOT YOUR PERSONAL EMAIL**) to a member of the Red Hat team.
+1. Request an account by opening a ticket a <https://osticket.massopen.cloud>. Provide your organizational or academic email address (**NOT YOUR PERSONAL EMAIL**).
 
-2. Once they’ve veriﬁed your addition, open a browser and navigate to this URL: <https://console-openshift-console.apps.oac-prod-workload0.hcp.oac.massopen.cloud> Your screen should look like this:
+2. Once you receive notification that your account is available, open your browser and navigate to: <https://console-openshift-console.apps.oac-prod-workload0.hcp.oac.massopen.cloud> Your screen should look like this:
 
     ![](images/image-000.png)
 
@@ -67,6 +67,23 @@ toc: true
     Follow the steps to log in. When successfully logged in, you should see this:
 
     ![](images/image-012.png)
+
+## Checking your quota
+
+There is a resource quota associated with your account. You can view the quota and your current utilization by running:
+
+```
+oc get resourcequota
+```
+
+This will produce output like:
+
+```
+NAME                      REQUEST                                                   LIMIT                                     AGE
+project-myproject-quota   pods: 0/20, requests.cpu: 0/10, requests.memory: 0/10Gi   limits.cpu: 0/20, limits.memory: 0/40Gi   24h
+```
+
+Your quota is there just to prevent accidental consumption of resources. If you need a higher quota, contact the Open Accelerator support team by opening a ticket at <https://osticket.massopen.cloud>.
 
 ## Accessing OpenShift AI
 
