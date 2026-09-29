@@ -3,7 +3,11 @@ import { HtmlBasePlugin } from "@11ty/eleventy";
 import markdownIt from "markdown-it";
 import markdownItAttrs from "markdown-it-attrs";
 import markdownItAnchor from "markdown-it-anchor";
+import markdownItContainer from "markdown-it-container";
 import pluginTOC from "eleventy-plugin-toc";
+
+// Admonition types usable as fenced blocks in content markdown.
+const ADMONITION_TYPES = ["note", "tip", "warning", "important", "caution"];
 
 function passthroughCopyExtension(eleventyConfig, ext) {
 	[ext, ext.toUpperCase()].forEach((item, _) => {
@@ -30,6 +34,47 @@ function exposeRunMode(eleventyConfig) {
 
 	// Make runMode available to templates
 	eleventyConfig.addGlobalData("runMode", () => currentRunMode);
+}
+
+// Register an admonition block for each type in ADMONITION_TYPES. Blocks are
+// written MyST-style and closed with a bare fence:
+//
+//     :::{tip}
+//     Body text, parsed as markdown.
+//     :::
+//
+// "::: tip" works too, and any text after the type becomes the heading in place
+// of the capitalised type name:
+//
+//     :::{tip} Scale to zero
+function setupAdmonitions(markdownLib) {
+	ADMONITION_TYPES.forEach((type) => {
+		// Matches "{tip}" or a bare "tip", then an optional custom heading.
+		const opening = new RegExp(`^(?:\\{${type}\\}|${type}\\b)\\s*(.*)$`, "i");
+
+		markdownLib.use(markdownItContainer, type, {
+			validate: (params) => opening.test(params.trim()),
+
+			render: (tokens, idx) => {
+				if (tokens[idx].nesting !== 1) {
+					return "</aside>\n";
+				}
+
+				// A bare ":::{tip}" reaches us with an empty info: markdown-it-attrs
+				// reads the braces as a curly attribute and consumes them. Only the
+				// custom heading needs info, so fall back to the type name.
+				const heading = tokens[idx].info.trim().match(opening);
+				const title =
+					(heading && heading[1]) || type[0].toUpperCase() + type.slice(1);
+
+				return [
+					`<aside class="admonition admonition-${type}">`,
+					`<p class="admonition-title">${markdownLib.renderInline(title)}</p>`,
+					"",
+				].join("\n");
+			},
+		});
+	});
 }
 
 // Configure filters
@@ -66,6 +111,7 @@ export default function (eleventyConfig) {
 	setupFilters(eleventyConfig);
 
 	const markdownLib = markdownIt().use(markdownItAnchor).use(markdownItAttrs);
+	setupAdmonitions(markdownLib);
 	eleventyConfig.setLibrary("md", markdownLib);
 
 	// Add the TOC plugin
