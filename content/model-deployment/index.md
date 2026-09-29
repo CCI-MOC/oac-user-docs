@@ -164,6 +164,8 @@ spec:
               value: Qwen2.5-3B-Instruct
             - name: HF_HOME
               value: /tmp/hf
+            - name: PYTHONPATH
+              value: /tmp/pylibs
             - name: HF_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -175,9 +177,8 @@ spec:
             - -c
             - |
               set -euo pipefail
-              export PYTHONUSERBASE=/tmp/pylibs
-              pip install --quiet --user "huggingface_hub[hf_xet]"
-              export PATH="$PYTHONUSERBASE/bin:$PATH"
+              pip install --quiet --target "$PYTHONPATH" "huggingface_hub[hf_xet]"
+              export PATH="$PYTHONPATH/bin:$PATH"
               hf download "$MODEL_REPO" --local-dir "/mnt/models/$MODEL_DIR"
               ls -la "/mnt/models/$MODEL_DIR"
           volumeMounts:
