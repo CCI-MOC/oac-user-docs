@@ -81,8 +81,48 @@ The choice is per-project and either/or.
 
 ## Create the model storage PVC
 
-The PVC must be `ReadWriteMany` so that the loader job and the model server can both mount it.
-On this cluster, `pure-fb-nfsv4` is the RWX-capable storage class.
+The weights have to live somewhere before either the loader job or the model server can start,
+so create the PVC now. The PVC must be `ReadWriteMany` so that both can mount it. On this
+cluster, `pure-fb-nfsv4` is the RWX-capable storage class.
+
+```
+oc apply -f - <<'EOF'
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: qwen-model-pvc
+  labels:
+    opendatahub.io/dashboard: "true"
+  annotations:
+    openshift.io/display-name: qwen-model-pvc
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: pure-fb-nfsv4
+  resources:
+    requests:
+      storage: 20Gi
+EOF
+```
+
+Size the PVC for the model you are downloading, with room to spare. Qwen2.5-3B-Instruct is
+roughly 5.8 GB across 12 files.
+
+Confirm the PVC actually exists before going any further:
+
+```
+oc get pvc qwen-model-pvc
+NAME             STATUS   VOLUME     CAPACITY   ACCESS MODES   STORAGECLASS    AGE
+qwen-model-pvc   Bound    pvc-...    20Gi       RWX            pure-fb-nfsv4   10s
+```
+
+The status may briefly be `Pending` while the volume is provisioned. It must reach `Bound`,
+with `RWX` under **ACCESS MODES**. If `oc get pvc` returns nothing, the PVC was not created and
+the loader job in the next-but-one step will never be scheduled.
+
+:::{note} If you prefer a reusable template
+If you expect to create this PVC repeatedly, with different names or sizes, you can register an
+OpenShift template instead:
 
 ```
 oc apply -f - <<'EOF'
@@ -122,8 +162,15 @@ objects:
 EOF
 ```
 
-Size the PVC for the model you are downloading, with room to spare. Qwen2.5-3B-Instruct is
-roughly 5.8 GB across 12 files.
+Applying that YAML only *registers* the template — `oc get templates` will list `model-pvc`,
+but `oc get pvc` will still be empty. Creating the PVC is a second, separate command:
+
+```
+oc process model-pvc -p PVC_NAME=qwen-model-pvc -p STORAGE_SIZE=20Gi | oc apply -f -
+```
+
+Then verify with `oc get pvc` as above.
+:::
 
 ## Store your HuggingFace token
 
@@ -137,8 +184,15 @@ Do not put the token directly into a YAML file you intend to commit.
 
 ## Load the weights onto the PVC
 
-This job mounts the PVC at `/mnt/models` and downloads the model into a subdirectory. If you are using a different model than the [Qwen2.5-3B-Instruct](https://huggingface.co/Qwen/Qwen2.5-3B-Instruct)
-update the `MODEL_REPO` and `MODEL_DIR` variables.
+This job mounts the PVC created in
+[Create the model storage PVC](#create-the-model-storage-pvc) at `/mnt/models` and downloads the
+model into a subdirectory. The PVC has to exist first — the job's pod cannot be scheduled
+otherwise, and the job will sit at `0/1` completions indefinitely rather than failing.
+
+If you are using a different model than
+[Qwen2.5-3B-Instruct](https://huggingface.co/Qwen/Qwen2.5-3B-Instruct), update the `MODEL_REPO`
+and `MODEL_DIR` variables. If you gave the PVC a name other than `qwen-model-pvc`, update
+`claimName` to match.
 
 ```
 oc apply -f - <<'EOF'
@@ -200,7 +254,20 @@ Wait for it to finish:
 oc wait --for=condition=complete job/model-loader --timeout=1800s
 ```
 
-The transfer usually takes well under a minute for a model this size. Confirm the files landed:
+The transfer usually takes well under a minute for a model this size. If `oc wait` has not
+returned after a couple of minutes, the pod is probably not running at all — check with:
+
+```
+oc get jobs
+oc events
+```
+
+A `FailedScheduling` event reading `persistentvolumeclaim "qwen-model-pvc" not found` means the
+PVC was never created. Go back to
+[Create the model storage PVC](#create-the-model-storage-pvc), then delete and re-apply the job
+with `oc delete job model-loader`.
+
+Confirm the files landed:
 
 ```
 oc logs job/model-loader | tail -20
@@ -326,7 +393,7 @@ oc logs -f -l serving.kserve.io/inferenceservice=qwen-model -c kserve-container
 The dashboard shows the inference endpoint on the model's row once it is ready.
 It should look like:
 
-    ![](images/image-006.png)
+![](images/image-06.png)
 
 ## Using the model
 
@@ -383,6 +450,14 @@ The PVC was not created as RWX. Use the `pure-fb-nfsv4` storage class with `Read
 **Model path rejected by the form**
 
 The path contains a leading slash, or a path pointing at the PVC root.
+
+**Loader job never completes, and `oc logs job/model-loader` prints nothing**
+
+The pod was never scheduled, so there are no logs yet. Run `oc events` and look for
+`FailedScheduling`. `persistentvolumeclaim "qwen-model-pvc" not found` means the PVC does not
+exist — `oc get pvc` will be empty. If `oc get templates` lists `model-pvc`, you registered the
+template but never processed it; see
+[Create the model storage PVC](#create-the-model-storage-pvc).
 
 **Model server pod stuck in `Pending`**
 
