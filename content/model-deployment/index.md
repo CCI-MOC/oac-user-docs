@@ -120,57 +120,6 @@ The status may briefly be `Pending` while the volume is provisioned. It must rea
 with `RWX` under **ACCESS MODES**. If `oc get pvc` returns nothing, the PVC was not created and
 the loader job in the next-but-one step will never be scheduled.
 
-:::{note} If you prefer a reusable template
-If you expect to create this PVC repeatedly, with different names or sizes, you can register an
-OpenShift template instead:
-
-```
-oc apply -f - <<'EOF'
-apiVersion: template.openshift.io/v1
-kind: Template
-metadata:
-  name: model-pvc
-parameters:
-  - name: PVC_NAME
-    description: Name of the PersistentVolumeClaim
-    value: qwen-model-pvc
-  - name: STORAGE_SIZE
-    description: Size of the PVC
-    value: 20Gi
-  - name: STORAGE_CLASS
-    description: StorageClass to use (cluster default is pure-fb-nfsv4, Pure FlashBlade over NFS)
-    value: pure-fb-nfsv4
-  - name: ACCESS_MODE
-    description: Access mode (ReadWriteMany for file storage such as pure-fb-nfsv4, ReadWriteOnce for block)
-    value: ReadWriteMany
-objects:
-  - apiVersion: v1
-    kind: PersistentVolumeClaim
-    metadata:
-      name: ${PVC_NAME}
-      labels:
-        opendatahub.io/dashboard: "true"
-      annotations:
-        openshift.io/display-name: ${PVC_NAME}
-    spec:
-      accessModes:
-        - ${ACCESS_MODE}
-      storageClassName: ${STORAGE_CLASS}
-      resources:
-        requests:
-          storage: ${STORAGE_SIZE}
-EOF
-```
-
-Applying that YAML only *registers* the template — `oc get templates` will list `model-pvc`,
-but `oc get pvc` will still be empty. Creating the PVC is a second, separate command:
-
-```
-oc process model-pvc -p PVC_NAME=qwen-model-pvc -p STORAGE_SIZE=20Gi | oc apply -f -
-```
-
-Then verify with `oc get pvc` as above.
-:::
 
 ## Store your HuggingFace token
 
@@ -433,27 +382,27 @@ redeploy later without downloading the model again. To reclaim the storage as we
 oc delete pvc qwen-model-pvc
 ```
 
-### Troubleshooting
+## Troubleshooting
 
 **Your project does not appear in the dashboard**
 
-The namespace is missing the `opendatahub.io/dashboard=true` label.
+- The namespace is missing the `opendatahub.io/dashboard=true` label.
 
 **Only S3 / URI / OCI shown under source model location**
 
-The PVC is missing the `opendatahub.io/dashboard=true` label. Add the label, then reload the page.
+- The PVC is missing the `opendatahub.io/dashboard=true` label. Add the label, then reload the page.
 
 **"The access mode ... is not ReadWriteMany"**
 
-The PVC was not created as RWX. Use the `pure-fb-nfsv4` storage class with `ReadWriteMany`.
+- The PVC was not created as RWX. Use the `pure-fb-nfsv4` storage class with `ReadWriteMany`.
 
 **Model path rejected by the form**
 
-The path contains a leading slash, or a path pointing at the PVC root.
+- The path contains a leading slash, or a path pointing at the PVC root.
 
 **Loader job never completes, and `oc logs job/model-loader` prints nothing**
 
-The pod was never scheduled, so there are no logs yet. Run `oc events` and look for
+- The pod was never scheduled, so there are no logs yet. Run `oc events` and look for
 `FailedScheduling`. `persistentvolumeclaim "qwen-model-pvc" not found` means the PVC does not
 exist — `oc get pvc` will be empty. If `oc get templates` lists `model-pvc`, you registered the
 template but never processed it; see
@@ -461,21 +410,21 @@ template but never processed it; see
 
 **Model server pod stuck in `Pending`**
 
-No hardware profile selected, so the pod has no toleration for the GPU node taint, or the
+- No hardware profile selected, so the pod has no toleration for the GPU node taint, or the
 cluster has no free GPU.
 
 **Deployment rejected, or pod never created**
 
-Project quota exceeded. Check `oc get resourcequota` and request an increase.
+- Project quota exceeded. Check `oc get resourcequota` and request an increase.
 
 **vLLM starts but cannot find the model**
 
-The **Model path** does not match the directory the loader job wrote. Check
+- The **Model path** does not match the directory the loader job wrote. Check
 `oc logs job/model-loader`.
 
 **Loader job fails with a 401 or 403**
 
-The model repository is gated and the `hf-token` secret is missing, wrong, or lacks access to
+- The model repository is gated and the `hf-token` secret is missing, wrong, or lacks access to
 that repository.
 
 If you are stuck, open a ticket at <https://osticket.massopen.cloud>.
