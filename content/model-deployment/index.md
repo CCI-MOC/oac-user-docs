@@ -81,49 +81,45 @@ The choice is per-project and either/or.
 
 ## Create the model storage PVC
 
-The PVC must be `ReadWriteMany` so that the loader job and the model server can both mount it.
-On this cluster, `pure-fb-nfsv4` is the RWX-capable storage class.
+The weights have to live somewhere before either the loader job or the model server can start,
+so create the PVC now. The PVC must be `ReadWriteMany` so that both can mount it. On this
+cluster, `pure-fb-nfsv4` is the RWX-capable storage class.
 
 ```
 oc apply -f - <<'EOF'
-apiVersion: template.openshift.io/v1
-kind: Template
+apiVersion: v1
+kind: PersistentVolumeClaim
 metadata:
-  name: model-pvc
-parameters:
-  - name: PVC_NAME
-    description: Name of the PersistentVolumeClaim
-    value: qwen-model-pvc
-  - name: STORAGE_SIZE
-    description: Size of the PVC
-    value: 20Gi
-  - name: STORAGE_CLASS
-    description: StorageClass to use (cluster default is pure-fb-nfsv4, Pure FlashBlade over NFS)
-    value: pure-fb-nfsv4
-  - name: ACCESS_MODE
-    description: Access mode (ReadWriteMany for file storage such as pure-fb-nfsv4, ReadWriteOnce for block)
-    value: ReadWriteMany
-objects:
-  - apiVersion: v1
-    kind: PersistentVolumeClaim
-    metadata:
-      name: ${PVC_NAME}
-      labels:
-        opendatahub.io/dashboard: "true"
-      annotations:
-        openshift.io/display-name: ${PVC_NAME}
-    spec:
-      accessModes:
-        - ${ACCESS_MODE}
-      storageClassName: ${STORAGE_CLASS}
-      resources:
-        requests:
-          storage: ${STORAGE_SIZE}
+  name: qwen-model-pvc
+  labels:
+    opendatahub.io/dashboard: "true"
+  annotations:
+    openshift.io/display-name: qwen-model-pvc
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: pure-fb-nfsv4
+  resources:
+    requests:
+      storage: 20Gi
 EOF
 ```
 
 Size the PVC for the model you are downloading, with room to spare. Qwen2.5-3B-Instruct is
 roughly 5.8 GB across 12 files.
+
+Confirm the PVC actually exists before going any further:
+
+```
+oc get pvc qwen-model-pvc
+NAME             STATUS   VOLUME     CAPACITY   ACCESS MODES   STORAGECLASS    AGE
+qwen-model-pvc   Bound    pvc-...    20Gi       RWX            pure-fb-nfsv4   10s
+```
+
+The status may briefly be `Pending` while the volume is provisioned. It must reach `Bound`,
+with `RWX` under **ACCESS MODES**. If `oc get pvc` returns nothing, the PVC was not created and
+the loader job in the next-but-one step will never be scheduled.
+
 
 ## Store your HuggingFace token
 
@@ -137,8 +133,15 @@ Do not put the token directly into a YAML file you intend to commit.
 
 ## Load the weights onto the PVC
 
-This job mounts the PVC at `/mnt/models` and downloads the model into a subdirectory. If you are using a different model than the [Qwen2.5-3B-Instruct](https://huggingface.co/Qwen/Qwen2.5-3B-Instruct)
-update the `MODEL_REPO` and `MODEL_DIR` variables.
+This job mounts the PVC created in
+[Create the model storage PVC](#create-the-model-storage-pvc) at `/mnt/models` and downloads the
+model into a subdirectory. The PVC has to exist first — the job's pod cannot be scheduled
+otherwise, and the job will sit at `0/1` completions indefinitely rather than failing.
+
+If you are using a different model than
+[Qwen2.5-3B-Instruct](https://huggingface.co/Qwen/Qwen2.5-3B-Instruct), update the `MODEL_REPO`
+and `MODEL_DIR` variables. If you gave the PVC a name other than `qwen-model-pvc`, update
+`claimName` to match.
 
 ```
 oc apply -f - <<'EOF'
@@ -161,6 +164,8 @@ spec:
               value: Qwen2.5-3B-Instruct
             - name: HF_HOME
               value: /tmp/hf
+            - name: PYTHONPATH
+              value: /tmp/pylibs
             - name: HF_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -172,9 +177,8 @@ spec:
             - -c
             - |
               set -euo pipefail
-              export PYTHONUSERBASE=/tmp/pylibs
-              pip install --quiet --user "huggingface_hub[hf_xet]"
-              export PATH="$PYTHONUSERBASE/bin:$PATH"
+              pip install --quiet --target "$PYTHONPATH" "huggingface_hub[hf_xet]"
+              export PATH="$PYTHONPATH/bin:$PATH"
               hf download "$MODEL_REPO" --local-dir "/mnt/models/$MODEL_DIR"
               ls -la "/mnt/models/$MODEL_DIR"
           volumeMounts:
@@ -200,7 +204,20 @@ Wait for it to finish:
 oc wait --for=condition=complete job/model-loader --timeout=1800s
 ```
 
-The transfer usually takes well under a minute for a model this size. Confirm the files landed:
+The transfer usually takes well under a minute for a model this size. If `oc wait` has not
+returned after a couple of minutes, the pod is probably not running at all — check with:
+
+```
+oc get jobs
+oc events
+```
+
+A `FailedScheduling` event reading `persistentvolumeclaim "qwen-model-pvc" not found` means the
+PVC was never created. Go back to
+[Create the model storage PVC](#create-the-model-storage-pvc), then delete and re-apply the job
+with `oc delete job model-loader`.
+
+Confirm the files landed:
 
 ```
 oc logs job/model-loader | tail -20
@@ -326,7 +343,7 @@ oc logs -f -l serving.kserve.io/inferenceservice=qwen-model -c kserve-container
 The dashboard shows the inference endpoint on the model's row once it is ready.
 It should look like:
 
-    ![](images/image-006.png)
+![](images/image-06.png)
 
 ## Using the model
 
@@ -366,41 +383,49 @@ redeploy later without downloading the model again. To reclaim the storage as we
 oc delete pvc qwen-model-pvc
 ```
 
-### Troubleshooting
+## Troubleshooting
 
 **Your project does not appear in the dashboard**
 
-The namespace is missing the `opendatahub.io/dashboard=true` label.
+- The namespace is missing the `opendatahub.io/dashboard=true` label.
 
 **Only S3 / URI / OCI shown under source model location**
 
-The PVC is missing the `opendatahub.io/dashboard=true` label. Add the label, then reload the page.
+- The PVC is missing the `opendatahub.io/dashboard=true` label. Add the label, then reload the page.
 
 **"The access mode ... is not ReadWriteMany"**
 
-The PVC was not created as RWX. Use the `pure-fb-nfsv4` storage class with `ReadWriteMany`.
+- The PVC was not created as RWX. Use the `pure-fb-nfsv4` storage class with `ReadWriteMany`.
 
 **Model path rejected by the form**
 
-The path contains a leading slash, or a path pointing at the PVC root.
+- The path contains a leading slash, or a path pointing at the PVC root.
+
+**Loader job never completes, and `oc logs job/model-loader` prints nothing**
+
+- The pod was never scheduled, so there are no logs yet. Run `oc events` and look for
+`FailedScheduling`. `persistentvolumeclaim "qwen-model-pvc" not found` means the PVC does not
+exist — `oc get pvc` will be empty. If `oc get templates` lists `model-pvc`, you registered the
+template but never processed it; see
+[Create the model storage PVC](#create-the-model-storage-pvc).
 
 **Model server pod stuck in `Pending`**
 
-No hardware profile selected, so the pod has no toleration for the GPU node taint, or the
+- No hardware profile selected, so the pod has no toleration for the GPU node taint, or the
 cluster has no free GPU.
 
 **Deployment rejected, or pod never created**
 
-Project quota exceeded. Check `oc get resourcequota` and request an increase.
+- Project quota exceeded. Check `oc get resourcequota` and request an increase.
 
 **vLLM starts but cannot find the model**
 
-The **Model path** does not match the directory the loader job wrote. Check
+- The **Model path** does not match the directory the loader job wrote. Check
 `oc logs job/model-loader`.
 
 **Loader job fails with a 401 or 403**
 
-The model repository is gated and the `hf-token` secret is missing, wrong, or lacks access to
+- The model repository is gated and the `hf-token` secret is missing, wrong, or lacks access to
 that repository.
 
 If you are stuck, open a ticket at <https://osticket.massopen.cloud>.
