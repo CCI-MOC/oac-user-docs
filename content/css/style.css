@@ -46,3 +46,42 @@ footer {
 	margin-top: 1rem;
 	font-size: small;
 }
+
+/* Admonitions, written in markdown as ":::{tip} ... :::" */
+.admonition {
+	margin: 1rem 0;
+	padding: 0.75rem 1rem;
+	border: thin solid #b0b0b0;
+	border-left: 4px solid #606060;
+	background-color: #f4f4f4;
+	break-inside: avoid;
+}
+
+.admonition > :first-child {
+	margin-top: 0;
+}
+
+.admonition > :last-child {
+	margin-bottom: 0;
+}
+
+.admonition-title {
+	font-weight: bold;
+}
+
+.admonition-note,
+.admonition-important {
+	border-left-color: #2b6cb0;
+	background-color: #eef4fb;
+}
+
+.admonition-tip {
+	border-left-color: #2f855a;
+	background-color: #eef7f1;
+}
+
+.admonition-warning,
+.admonition-caution {
+	border-left-color: #b7791f;
+	background-color: #fdf6e7;
+}
